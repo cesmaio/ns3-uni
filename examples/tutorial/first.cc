@@ -26,7 +26,7 @@
 // n0 -------------- n1
 //    point-to-point
 //
- 
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("FirstScriptExample");
@@ -36,7 +36,7 @@ main (int argc, char *argv[])
 {
   CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
-  
+
   Time::SetResolution (Time::NS);
   LogComponentEnable ("UdpEchoClientApplication", LOG_LEVEL_INFO);
   LogComponentEnable ("UdpEchoServerApplication", LOG_LEVEL_INFO);
@@ -45,32 +45,33 @@ main (int argc, char *argv[])
   nodes.Create (2);
 
   PointToPointHelper pointToPoint;
-  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
-  pointToPoint.SetChannelAttribute ("Delay", StringValue ("2ms"));
+  pointToPoint.SetDeviceAttribute (
+      "DataRate", StringValue ("5Mbps")); // same as DataRateValue (DataRate (5000000)) - in bps
+  pointToPoint.SetChannelAttribute ("Delay",
+                                    StringValue ("2ms")); // same as TimeValue (MilliSeconds (2))
 
   NetDeviceContainer devices;
   devices = pointToPoint.Install (nodes);
 
-  InternetStackHelper stack;
+  InternetStackHelper stack; // enable comunication stack
   stack.Install (nodes);
 
   Ipv4AddressHelper address;
   address.SetBase ("10.1.1.0", "255.255.255.0");
-
   Ipv4InterfaceContainer interfaces = address.Assign (devices);
 
-  UdpEchoServerHelper echoServer (9);
+  UdpEchoServerHelper echoServer (9); // listening to port 9
+  ApplicationContainer serverApps = echoServer.Install (nodes.Get (1)); // install in node 1
+  serverApps.Start (Seconds (1.0)); // starting time of all applications
+  serverApps.Stop (Seconds (10.0)); // stopping time
 
-  ApplicationContainer serverApps = echoServer.Install (nodes.Get (1));
-  serverApps.Start (Seconds (1.0));
-  serverApps.Stop (Seconds (10.0));
-
-  UdpEchoClientHelper echoClient (interfaces.GetAddress (1), 9);
-  echoClient.SetAttribute ("MaxPackets", UintegerValue (1));
+  UdpEchoClientHelper echoClient (interfaces.GetAddress (1),
+                                  9); // sending to IP address and port of the server
+  echoClient.SetAttribute ("MaxPackets", UintegerValue (2));
   echoClient.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
   echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
 
-  ApplicationContainer clientApps = echoClient.Install (nodes.Get (0));
+  ApplicationContainer clientApps = echoClient.Install (nodes.Get (0)); // install in node 0
   clientApps.Start (Seconds (2.0));
   clientApps.Stop (Seconds (10.0));
 
