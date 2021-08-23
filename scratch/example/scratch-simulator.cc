@@ -20,9 +20,23 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("ScratchSimulator");
 
-int 
+int
 main (int argc, char *argv[])
 {
+  // test arguments
+  ns3::CommandLine cmd;
+  // default values
+  bool testing = false;
+  std::string name = "NoName";
+
+  cmd.AddValue ("testing", "Running a test", testing);
+  cmd.AddValue ("name", "Your name", name);
+
+  cmd.Parse (argc, argv);
+
+  std::cout << "My name is: " << name << std::endl;
+  std::cout << "And i'm running my test: " << testing << std::endl;
+
   NS_LOG_UNCOND ("Scratch Simulator");
 
   Simulator::Run ();
