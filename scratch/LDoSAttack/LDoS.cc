@@ -15,15 +15,17 @@
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
+#include "ns3/flow-monitor-helper.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/applications-module.h"
+#include "ns3/traffic-control-module.h"
 #include "ns3/ipv4-global-routing-helper.h"
 
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("LDoSAttack");
 
-#define ATTACK 1 // Run simulation with/out attacker
+#define ATTACK 0 // Run simulation with/out attacker
 
 int
 main (int argc, char *argv[])
@@ -37,30 +39,36 @@ main (int argc, char *argv[])
   CommandLine cmd (__FILE__);
 
   bool verbose = false, tracing = true;
-  double maxSimulationTime = 605.0;
+  double global_start_time = 0.0;
+  double global_stop_time = 605.0;
+  double sink_start_time = global_start_time;
+  double sink_stop_time = global_stop_time + 20.0;
+  double client_start_time = global_start_time + 1.0;
+  double client_stop_time = global_stop_time;
   uint32_t TCPn = 10;
   uint32_t bTCPn = 5;
   uint32_t BUn = 5;
+  std::string std_linkDataRate = "100Mbps";
+  std::string std_linkDelay = "30ms";
+  std::string bottleneck_linkDataRate = "10Mbps";
+  std::string bottleneck_linkDelay = "15ms";
 
   cmd.AddValue ("verbose", "Explicit debugging", verbose);
   cmd.AddValue ("tracing", "Save tracing information", tracing);
-  cmd.AddValue ("maxSimulationTime", "starting at 0.0s, when the simulation ends (s)",
-                maxSimulationTime);
+  cmd.AddValue ("global_start_time", "when the simulation starts (s)", global_start_time);
+  cmd.AddValue ("global_stop_time", "when the simulation ends (s)", global_stop_time);
   cmd.AddValue ("TCPn", "Number of nodes sending/receiving normal TCP traffic", TCPn);
   cmd.AddValue ("bTCPn", "Number of nodes sending/receiving background TCP traffic", bTCPn);
   cmd.AddValue ("BUn", "Number of nodes sending background UDP traffic", BUn);
 
-  double attack_offTime = 0.0;
-
 #if (ATTACK)
   // * LDoS Attack parameters
-  double attack_start = 5.0; // s
-  double attack_stop = maxSimulationTime; // s
+  double attack_start_time = global_start_time + 5.0; // s
+  double attack_stop_time = global_stop_time; // s
   double attack_T = 1.0; // cycle (s)
   double attack_t = 0.3; // duration (s)
   double R = 30; // intensity (Mbps)
 
-  cmd.AddValue ("attack_start", "when the LDoS attack starts (s)", attack_start);
   cmd.AddValue ("attack_T", "LDoS attack period (s)", attack_T);
   cmd.AddValue ("attack_t", "LDoS attack duration (s)", attack_t);
   cmd.AddValue ("attack_R", "LDoS attack strength (Mbps)", R);
@@ -72,7 +80,7 @@ main (int argc, char *argv[])
   // Also used to start sending TCP packets
   // (to sync with the attacker for a more successfull attack.
   //  This is because the UDP OnOff application is initially in the Off state)
-  attack_offTime = attack_T - attack_t;
+  double attack_offTime = attack_T - attack_t;
 
   std::string attack_R = std::to_string (R) + "Mbps";
 #endif
@@ -100,10 +108,14 @@ main (int argc, char *argv[])
   A_nodes.Create (1); // 1 attacker
 #endif
 
+  NS_LOG_INFO ("Install internet stack on all nodes.");
+  InternetStackHelper internet;
+  internet.InstallAll ();
+
   NS_LOG_INFO ("Crete point-to-point channels.");
   PointToPointHelper p2p;
-  p2p.SetDeviceAttribute ("DataRate", StringValue ("100Mbps"));
-  p2p.SetChannelAttribute ("Delay", StringValue ("15ms"));
+  p2p.SetDeviceAttribute ("DataRate", StringValue (std_linkDataRate));
+  p2p.SetChannelAttribute ("Delay", StringValue (std_linkDelay));
 
   std::vector<NetDeviceContainer> T_dev (TCPn), S_dev (TCPn), BT_dev (bTCPn), BS_dev (bTCPn),
       BU_dev (BUn);
@@ -127,18 +139,27 @@ main (int argc, char *argv[])
   NetDeviceContainer A_dev = p2p.Install (A_nodes.Get (0), router_nodes.Get (0));
 #endif
 
+  // routers with RED queue management algorithm
+  TrafficControlHelper tch_r1r2, tch_r2r3;
+  tch_r1r2.SetRootQueueDisc ("ns3::RedQueueDisc", "LinkBandwidth", StringValue (std_linkDataRate),
+                             "LinkDelay", StringValue (std_linkDelay));
+  tch_r2r3.SetRootQueueDisc ("ns3::RedQueueDisc", "LinkBandwidth",
+                             StringValue (bottleneck_linkDataRate), "LinkDelay",
+                             StringValue (bottleneck_linkDelay));
+  PointToPointHelper p2pRed;
+
   // connect r1 and r2
-  NetDeviceContainer r1r2 = p2p.Install (router_nodes.Get (0), router_nodes.Get (1));
+  p2pRed.SetDeviceAttribute ("DataRate", StringValue (std_linkDataRate));
+  p2pRed.SetChannelAttribute ("Delay", StringValue (std_linkDelay));
+  NetDeviceContainer r1r2 = p2pRed.Install (router_nodes.Get (0), router_nodes.Get (1));
+  tch_r1r2.Install (r1r2);
 
   // * bottleneck
-  p2p.SetDeviceAttribute ("DataRate", StringValue ("10Mbps"));
-  p2p.SetChannelAttribute ("Delay", StringValue ("30ms"));
   // connect r2 and r3
-  NetDeviceContainer r2r3 = p2p.Install (router_nodes.Get (1), router_nodes.Get (2));
-
-  NS_LOG_INFO ("Install internet stack on all nodes.");
-  InternetStackHelper internet;
-  internet.InstallAll ();
+  p2pRed.SetDeviceAttribute ("DataRate", StringValue (bottleneck_linkDataRate));
+  p2pRed.SetChannelAttribute ("Delay", StringValue (bottleneck_linkDelay));
+  NetDeviceContainer r2r3 = p2pRed.Install (router_nodes.Get (1), router_nodes.Get (2));
+  tch_r2r3.Install (r2r3);
 
   NS_LOG_INFO ("Assign IP Addresses.");
   Ipv4AddressHelper ipv4;
@@ -217,7 +238,7 @@ main (int argc, char *argv[])
     }
 
   tcp_sinkApps.Start (Seconds (0.0));
-  tcp_sinkApps.Stop (Seconds (maxSimulationTime + 100));
+  tcp_sinkApps.Stop (Seconds (global_start_time + 100));
 
   // Create a Bulk Send Application to send TCP packets
   BulkSendHelper tcp_client ("ns3::TcpSocketFactory", Address ());
@@ -231,8 +252,8 @@ main (int argc, char *argv[])
       bTCP_clientApps.Add (tcp_client.Install (BT_nodes.Get (i)));
     }
 
-  bTCP_clientApps.Start (Seconds (0.0));
-  bTCP_clientApps.Stop (Seconds (maxSimulationTime));
+  bTCP_clientApps.Start (Seconds (client_start_time));
+  bTCP_clientApps.Stop (Seconds (client_stop_time));
 
   // setup normal TCP flow (T_nodes -> S_nodes)
   ApplicationContainer TCP_clientApps;
@@ -243,8 +264,8 @@ main (int argc, char *argv[])
       TCP_clientApps.Add (tcp_client.Install (T_nodes.Get (i)));
     }
 
-  TCP_clientApps.Start (Seconds (attack_offTime));
-  TCP_clientApps.Stop (Seconds (maxSimulationTime));
+  TCP_clientApps.Start (Seconds (client_start_time));
+  TCP_clientApps.Stop (Seconds (client_stop_time));
 
   /* create UDP sink on receiver R3 */
 
@@ -252,8 +273,8 @@ main (int argc, char *argv[])
                              Address (InetSocketAddress (Ipv4Address::GetAny (), udp_port)));
 
   ApplicationContainer udp_sinkApp = udp_sink.Install (router_nodes.Get (2));
-  udp_sinkApp.Start (Seconds (0.0));
-  udp_sinkApp.Stop (Seconds (maxSimulationTime + 100));
+  udp_sinkApp.Start (Seconds (sink_start_time));
+  udp_sinkApp.Stop (Seconds (sink_stop_time));
 
   /* Send background UDP traffic from BU_nodes to R3 */
 
@@ -263,8 +284,8 @@ main (int argc, char *argv[])
   // udp_client.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
 
   // ApplicationContainer udp_clientApps = udp_client.Install (BU_nodes);
-  // udp_clientApps.Start (Seconds (0.0));
-  // udp_clientApps.Stop (Seconds (maxSimulationTime));
+  // udp_clientApps.Start (Seconds (client_start_time));
+  // udp_clientApps.Stop (Seconds (client_stop_time));
 
   /* LDoS attack */
 #if (ATTACK)
@@ -282,8 +303,8 @@ main (int argc, char *argv[])
                                                        std::to_string (attack_offTime) + "]"));
 
   ApplicationContainer LDoSudp_clientApp = LDoSudp_client.Install (A_nodes.Get (0));
-  LDoSudp_clientApp.Start (Seconds (attack_start));
-  LDoSudp_clientApp.Stop (Seconds (attack_stop));
+  LDoSudp_clientApp.Start (Seconds (attack_start_time));
+  LDoSudp_clientApp.Stop (Seconds (attack_stop_time));
 #else
   NS_LOG_INFO ("LDoS attack disabled.");
 #endif
