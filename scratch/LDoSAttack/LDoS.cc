@@ -25,7 +25,7 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("LDoSAttack");
 
-#define ATTACK 0 // Run simulation with/out attacker
+#define ATTACK 1 // Run simulation with/out attacker
 
 int
 main (int argc, char *argv[])
@@ -66,8 +66,8 @@ main (int argc, char *argv[])
   double attack_start_time = global_start_time + 5.0; // s
   double attack_stop_time = global_stop_time; // s
   double attack_T = 1.0; // cycle (s)
-  double attack_t = 0.3; // duration (s)
-  double R = 30; // intensity (Mbps)
+  double attack_t = 0.1; // duration (s)
+  double R = 20; // intensity (Mbps)
 
   cmd.AddValue ("attack_T", "LDoS attack period (s)", attack_T);
   cmd.AddValue ("attack_t", "LDoS attack duration (s)", attack_t);
@@ -163,6 +163,7 @@ main (int argc, char *argv[])
 
   NS_LOG_INFO ("Assign IP Addresses.");
   Ipv4AddressHelper ipv4;
+
   std::vector<Ipv4InterfaceContainer> T_int (TCPn), S_int (TCPn), BT_int (bTCPn), BS_int (bTCPn),
       BU_int (BUn);
 
@@ -237,8 +238,8 @@ main (int argc, char *argv[])
       tcp_sinkApps.Add (tcp_sink.Install (S_nodes.Get (i)));
     }
 
-  tcp_sinkApps.Start (Seconds (0.0));
-  tcp_sinkApps.Stop (Seconds (global_start_time + 100));
+  tcp_sinkApps.Start (Seconds (sink_start_time));
+  tcp_sinkApps.Stop (Seconds (sink_stop_time));
 
   // Create a Bulk Send Application to send TCP packets
   BulkSendHelper tcp_client ("ns3::TcpSocketFactory", Address ());
@@ -278,14 +279,14 @@ main (int argc, char *argv[])
 
   /* Send background UDP traffic from BU_nodes to R3 */
 
-  // OnOffHelper udp_client ("ns3::UdpSocketFactory",
-  //                         Address (InetSocketAddress (r2r3_int.GetAddress (1), udp_port)));
-  // udp_client.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
-  // udp_client.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
+  OnOffHelper udp_client ("ns3::UdpSocketFactory",
+                          Address (InetSocketAddress (r2r3_int.GetAddress (1), udp_port)));
+  udp_client.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
+  udp_client.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
 
-  // ApplicationContainer udp_clientApps = udp_client.Install (BU_nodes);
-  // udp_clientApps.Start (Seconds (client_start_time));
-  // udp_clientApps.Stop (Seconds (client_stop_time));
+  ApplicationContainer udp_clientApps = udp_client.Install (BU_nodes);
+  udp_clientApps.Start (Seconds (client_start_time));
+  udp_clientApps.Stop (Seconds (client_stop_time));
 
   /* LDoS attack */
 #if (ATTACK)
@@ -315,11 +316,11 @@ main (int argc, char *argv[])
       // pcap files: "prefix-nodeID-deviceID.pcap"
 #if (ATTACK)
       // p2p.EnableAsciiAll (ascii.CreateFileStream ("LDoS_A" + std::to_string (attack_cost) + ".tr"));
-      p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), router_nodes);
-      p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), A_nodes);
+      p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), r2r3);
+      p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), A_dev);
 #else
       // p2p.EnableAsciiAll (ascii.CreateFileStream ("LDoS.tr"));
-      p2p.EnablePcap ("LDoS", router_nodes);
+      p2p.EnablePcap ("LDoS", r2r3);
 #endif
     }
 
