@@ -316,10 +316,12 @@ main (int argc, char *argv[])
       // pcap files: "prefix-nodeID-deviceID.pcap"
 #if (ATTACK)
       // p2p.EnableAsciiAll (ascii.CreateFileStream ("LDoS_A" + std::to_string (attack_cost) + ".tr"));
+      p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), r1r2);
       p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), r2r3);
       p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), A_dev);
 #else
       // p2p.EnableAsciiAll (ascii.CreateFileStream ("LDoS.tr"));
+      p2p.EnablePcap ("LDoS", r1r2);
       p2p.EnablePcap ("LDoS", r2r3);
 #endif
     }
