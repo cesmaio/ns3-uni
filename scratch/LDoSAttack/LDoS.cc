@@ -65,7 +65,7 @@ main (int argc, char *argv[])
   // * LDoS Attack parameters
   double attack_start_time = global_start_time + 5.0; // s
   double attack_stop_time = global_stop_time; // s
-  double attack_T = 1.0; // cycle (s)
+  double attack_T = 2.0; // cycle (s)
   double attack_t = 0.1; // duration (s)
   double R = 20; // intensity (Mbps)
 
@@ -281,8 +281,8 @@ main (int argc, char *argv[])
 
   OnOffHelper udp_client ("ns3::UdpSocketFactory",
                           Address (InetSocketAddress (r2r3_int.GetAddress (1), udp_port)));
-  udp_client.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
-  udp_client.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
+  udp_client.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.001]"));
+  udp_client.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.1]"));
 
   ApplicationContainer udp_clientApps = udp_client.Install (BU_nodes);
   udp_clientApps.Start (Seconds (client_start_time));
@@ -312,17 +312,14 @@ main (int argc, char *argv[])
 
   if (tracing)
     {
-      AsciiTraceHelper ascii;
+      // AsciiTraceHelper ascii;
       // pcap files: "prefix-nodeID-deviceID.pcap"
 #if (ATTACK)
       // p2p.EnableAsciiAll (ascii.CreateFileStream ("LDoS_A" + std::to_string (attack_cost) + ".tr"));
-      p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), r1r2);
-      p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), r2r3);
-      p2p.EnablePcap ("LDoS_A" + std::to_string (attack_cost), A_dev);
+      p2p.EnablePcapAll ("LDoS_A" + std::to_string (attack_cost));
 #else
       // p2p.EnableAsciiAll (ascii.CreateFileStream ("LDoS.tr"));
-      p2p.EnablePcap ("LDoS", r1r2);
-      p2p.EnablePcap ("LDoS", r2r3);
+      p2p.EnablePcapAll ("LDoS");
 #endif
     }
 
